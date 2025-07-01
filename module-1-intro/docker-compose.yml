@@ -1,0 +1,86 @@
+services:
+  broker-1:
+    image: confluentinc/cp-kafka:7.5.2
+    hostname: broker-1
+    container_name: broker-1
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      # KRaft cluster identifier (Base64 URL-safe UUID)
+      CLUSTER_ID: "q1a2b3C4d5E6f7G8h9Ij0K"
+
+      # Roles & quorum
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_NODE_ID: "1"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@broker-1:29092,2@broker-2:29092,3@broker-3:29092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+
+      # Network listeners
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://broker-1:9092"
+
+      # Default topic settings
+      KAFKA_NUM_PARTITIONS: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+
+      # === Sécurité ACL ===
+      KAFKA_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "true"
+      KAFKA_SUPER_USERS: "User:ANONYMOUS;User:broker-1;User:broker-2;User:broker-3;User:admin"
+    volumes:
+      - broker-1-data:/var/lib/kafka/data
+
+  broker-2:
+    image: confluentinc/cp-kafka:7.5.2
+    hostname: broker-2
+    container_name: broker-2
+    ports:
+      - "9093:9092"
+      - "29093:29092"
+    environment:
+      CLUSTER_ID: "q1a2b3C4d5E6f7G8h9Ij0K"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_NODE_ID: "2"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@broker-1:29092,2@broker-2:29092,3@broker-3:29092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://broker-2:9092"
+      KAFKA_NUM_PARTITIONS: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+      KAFKA_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "true"
+      KAFKA_SUPER_USERS: "User:ANONYMOUS;User:broker-1;User:broker-2;User:broker-3;User:admin"
+    volumes:
+      - broker-2-data:/var/lib/kafka/data
+
+  broker-3:
+    image: confluentinc/cp-kafka:7.5.2
+    hostname: broker-3
+    container_name: broker-3
+    ports:
+      - "9094:9092"
+      - "29094:29092"
+    environment:
+      CLUSTER_ID: "q1a2b3C4d5E6f7G8h9Ij0K"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_NODE_ID: "3"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@broker-1:29092,2@broker-2:29092,3@broker-3:29092"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:29092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://broker-3:9092"
+      KAFKA_NUM_PARTITIONS: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "3"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "2"
+      KAFKA_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "true"
+      KAFKA_SUPER_USERS: "User:ANONYMOUS;User:broker-1;User:broker-2;User:broker-3;User:admin"
+    volumes:
+      - broker-3-data:/var/lib/kafka/data
+
+volumes:
+  broker-1-data:
+  broker-2-data:
+  broker-3-data:
