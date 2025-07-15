@@ -86,9 +86,11 @@ kafka-acls \
 
 ### créer une ACL read-write pour l'utilisateur user-topic1 sur topic1
 
+Attention : il n'est pas nécessaire que le topic existe pour préparer les ACL !!!
+
 ```yaml
 # ACL lecture
-kafka-acls.sh \
+kafka-acls \
   --bootstrap-server broker-1:9092,broker-2:9092,broker-3:9092 \
   --add \
   --allow-principal User:user-topic1 \
@@ -96,14 +98,21 @@ kafka-acls.sh \
   --topic topic1
 
 # ACL écriture
-kafka-acls.sh \
+kafka-acls \
   --bootstrap-server broker-1:9092,broker-2:9092,broker-3:9092 \
   --add \
   --allow-principal User:user-topic1 \
   --operation Write \
   --topic topic1
-
 ```
+
+Point d'attention : 
+
+- Avec un pattern literal, seules les ACL pour ce nom exact s’appliqueront.
+- Avec un pattern prefixed ou le wildcard '*', les ACL s’appliqueront à tous les topics dont le nom matche le préfixe ou le wildcard.
+- Si vous avez configuré ```allow.everyone.if.no.acl.found=false``` (propriété souvent recommandée pour un mode ```« deny-by-default »```), toute opération sans ACL explicite sera refusée, d’où l’intérêt de pré-provisionner vos ACL pour les topics à venir.
+
+
 
     Attention seul l'utilisateur user-topic1 pourra écrire ou lire donc produire ou consommer y compris en ligne de commande. Il faut absolument utiliser SASL/SSL pour s'authentifier. A défaut on est ANONYMOUS
 
@@ -117,3 +126,52 @@ kafka-acls.sh \
 | Sécurité centralisée   | Gestion unifiée des ACL et métadonnées via l’Admin CLI/API ; plus d’accès direct à ZooKeeper.            |
 | Opérations atomiques   | Création de topics et modifications d’ACL transactionnelles et cohérentes via RAFT.                      |
 
+
+
+## Sécurisation SASL (sans chiffrement)
+
+Pour que Kafka prenne en compte vos ACL, il faut impérativement :
+
+1. **Configurer l’authorizer** dans `server.properties` (chaque broker)  
+```yaml
+authorizer.class.name=kafka.security.authorizer.AclAuthorizer
+
+allow.everyone.if.no.acl.found=false
+```
+
+2. Activer un listener SASL_PLAINTEXT
+
+```yaml
+listeners=SASL_PLAINTEXT://0.0.0.0:9092
+listener.name.sasl_plaintext.scram-sha-512.sasl.jaas.config=
+  org.apache.kafka.common.security.scram.ScramLoginModule required
+  username="admin"
+  password="admin-secret";
+```
+
+3. Utiliser SASL_PLAINTEXT dans les commandes CLI
+   
+- Créer un fichier ```client_sasl_plaintext.properties``` :
+
+```yaml
+security.protocol=SASL_PLAINTEXT
+sasl.mechanism=SCRAM-SHA-512
+sasl.jaas.config=\
+  org.apache.kafka.common.security.scram.ScramLoginModule required\
+  username="analytics"\
+  password="analytics-secret";
+```
+
+- Exécuter :
+
+```yaml
+kafka-acls \
+  --bootstrap-server broker-1:9092,broker-2:9092 \
+  --command-config client_sasl_plaintext.properties \
+  --add \
+  --allow-principal User:analytics \
+  --operation Read \
+  --topic sensitive-data
+```
+
+**ATTENTION : Comme il n’y a pas de chiffrement, toutes les données transitent en clair – à réserver au développement ou tests, non recommandé en production.**
