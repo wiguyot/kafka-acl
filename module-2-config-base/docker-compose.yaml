@@ -1,0 +1,120 @@
+services:
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: kafka
+    hostname: kafka
+    networks: [knet]
+    ports:
+      - "19092:19092"               # EXTERNAL (SASL_SSL) pour clients
+    environment:
+      BITNAMI_DEBUG: "true"
+
+      # ---- KRaft (sans ZooKeeper)
+      KAFKA_ENABLE_KRAFT: "yes"
+      KAFKA_KRAFT_CLUSTER_ID: "q1w2e3r4t5y6u7i8o9p0"
+      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+
+      # ---- Listeners : EXTERNAL chiffré pour les clients
+      KAFKA_CFG_LISTENERS: "INTERNAL://:29092,EXTERNAL://:19092,CONTROLLER://:9093"
+      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka:29092,EXTERNAL://localhost:19092"
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,EXTERNAL:SASL_SSL,CONTROLLER:PLAINTEXT"
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+
+      # ---- AuthN SASL/PLAIN (utilisateurs)
+      KAFKA_CFG_SASL_ENABLED_MECHANISMS: "PLAIN"
+      KAFKA_CFG_SASL_MECHANISM_INTER_BROKER_PROTOCOL: "PLAIN"
+      KAFKA_CLIENT_USERS: "admin,user1"
+      KAFKA_CLIENT_PASSWORDS: "admin-secret,user1-secret"
+
+      # ---- AuthZ (ACL) en KRaft
+      KAFKA_CFG_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
+      # ⚠️ Option A (dev): ajout d'ANONYMOUS pour autoriser l’enregistrement controller/broker en PLAINTEXT
+      KAFKA_CFG_SUPER_USERS: "User:admin;User:ANONYMOUS"
+      KAFKA_CFG_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
+
+      # ---- TLS (mode PEM) attendu par l'entrypoint Bitnami pour les data planes SSL/SASL_SSL
+      KAFKA_ENABLE_TLS: "yes"
+      KAFKA_TLS_TYPE: "PEM"
+      KAFKA_TLS_CERTIFICATE_FILE: "/bitnami/kafka/config/certs/kafka.keystore.pem"
+      KAFKA_TLS_KEY_FILE: "/bitnami/kafka/config/certs/kafka.keystore.key"
+      KAFKA_TLS_TRUSTSTORE_FILE: "/bitnami/kafka/config/certs/kafka.truststore.pem"
+      KAFKA_TLS_CLIENT_AUTH: "none"
+      # utile avec cert auto-signé/SAN locaux :
+      KAFKA_CFG_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: " "
+
+      # ---- Divers
+      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_CFG_NUM_PARTITIONS: "1"
+      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: "1"
+      KAFKA_CFG_MIN_INSYNC_REPLICAS: "1"
+
+    volumes:
+      # IMPORTANT : monter dans /bitnami/kafka/config/certs (chemin attendu par l'image)
+      - ./conf/certs:/bitnami/kafka/config/certs:ro
+
+    healthcheck:
+      test: ["CMD", "bash", "-c", "kafka-metadata-quorum.sh --bootstrap-server localhost:29092 describe --status >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  init-acls:
+    image: bitnami/kafka:3.7
+    container_name: init-acls
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks: [knet]
+    volumes:
+      - ./conf/certs:/opt/bitnami/kafka/config/certs:ro
+      - ./init/create-acls-and-topic.sh:/usr/local/bin/init-acls.sh:ro
+    entrypoint: ["/bin/bash","-lc","chmod +x /usr/local/bin/init-acls.sh && /usr/local/bin/init-acls.sh"]
+
+  producer:
+    image: python:3.11-slim
+    container_name: py-producer
+    networks: [knet]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      init-acls:
+        condition: service_completed_successfully
+    working_dir: /app
+    volumes:
+      - ./app:/app:ro
+      - ./conf/certs/kafka.truststore.pem:/app/ca.crt:ro
+    command: ["bash", "-lc", "pip install -r requirements.txt && python -u producer.py"]
+    environment:
+      BOOTSTRAP: "localhost:19092"
+      K_USERNAME: "user1"
+      K_PASSWORD: "user1-secret"
+      SSL_CA: "/app/ca.crt"
+      TOPIC: "weather"
+
+  consumer:
+    image: python:3.11-slim
+    container_name: py-consumer
+    networks: [knet]
+    depends_on:
+      kafka:
+        condition: service_healthy
+      init-acls:
+        condition: service_completed_successfully
+    working_dir: /app
+    volumes:
+      - ./app:/app:ro
+      - ./conf/certs/kafka.truststore.pem:/app/ca.crt:ro
+    command: ["bash", "-lc", "pip install -r requirements.txt && python -u consumer.py"]
+    environment:
+      BOOTSTRAP: "localhost:19092"
+      K_USERNAME: "user1"
+      K_PASSWORD: "user1-secret"
+      SSL_CA: "/app/ca.crt"
+      TOPIC: "weather"
+      GROUP: "weather-group"
+
+networks:
+  knet:
