@@ -14,3 +14,6 @@ done
 
 /opt/bitnami/kafka/bin/kafka-acls.sh --bootstrap-server kafka:29092 --add --allow-principal User:admin --operation All --topic weather
 /opt/bitnami/kafka/bin/kafka-acls.sh --bootstrap-server kafka:29092 --add --allow-principal User:admin --operation All --cluster
+
+/opt/bitnami/kafka/bin/kafka-acls.sh --bootstrap-server kafka:29092 --add --allow-principal User:user1 --operation DESCRIBE --group weather-group
+/opt/bitnami/kafka/bin/kafka-acls.sh --bootstrap-server kafka:29092 --add --allow-principal User:user1 --operation READ      --group weather-group

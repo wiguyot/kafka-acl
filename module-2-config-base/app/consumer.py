@@ -2,7 +2,7 @@ import os, json
 from confluent_kafka import Consumer, KafkaException
 
 conf = {
-    "bootstrap.servers": os.getenv("BOOTSTRAP","localhost:19092"),
+    "bootstrap.servers": os.getenv("BOOTSTRAP","kafka:19092"),
     "security.protocol": "SASL_SSL",
     "sasl.mechanism": "PLAIN",
     "sasl.username": os.getenv("K_USERNAME","user1"),
