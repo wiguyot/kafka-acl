@@ -70,8 +70,8 @@ services:
     networks: [knet]
     volumes:
       - ./conf/certs:/opt/bitnami/kafka/config/certs:ro
-      - ./init/create-acls-and-topic.sh:/usr/local/bin/init-acls.sh:ro
-    entrypoint: ["/bin/bash","-lc","chmod +x /usr/local/bin/init-acls.sh && /usr/local/bin/init-acls.sh"]
+      - ./init/create-acls-and-topic.sh:/usr/local/bin/init-acls.sh
+    entrypoint: ["/bin/bash", "-lc", "bash /usr/local/bin/init-acls.sh"]
 
   producer:
     image: python:3.11-slim
