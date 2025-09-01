@@ -1,5 +1,6 @@
 # Module 1 – Kafka en mode KRaft
 
+Introduction aux ACL en kafka
 
 ## Historique : ZooKeeper → KRaft
 
