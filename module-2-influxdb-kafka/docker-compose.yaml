@@ -1,106 +1,7 @@
 services:
-  # ======================
-  # Kafka broker (KRaft)
-  # ======================
-  kafka:
-    image: bitnami/kafka:3.7
-    container_name: kafka
-    hostname: kafka
-    networks: [knet]
-    ports:
-      - "19092:19092"               # EXTERNAL (SASL_SSL) exposé sur l'hôte pour outils/clients hors Docker
-      - "39092:39092"               # CLIENT (SASL_SSL) exposé (utile si tu testes depuis l'hôte aussi)
-    environment:
-      BITNAMI_DEBUG: "true"          # Logs d'init détaillés
-
-      # ---- Mode KRaft (Kafka sans ZooKeeper) ----
-      #   * PROCESS_ROLES = broker,controller : broker unique qui joue aussi le rôle de controller
-      #   * NODE_ID = 1 : identifiant du nœud dans le quorum KRaft
-      #   * CONTROLLER_QUORUM_VOTERS : mapping id@host:port du/des controllers
-      KAFKA_ENABLE_KRAFT: "yes"
-      KAFKA_KRAFT_CLUSTER_ID: "q1w2e3r4t5y6u7i8o9p0"   # ID stable du cluster (kafka-storage.sh format)
-      KAFKA_CFG_PROCESS_ROLES: "broker,controller"
-      KAFKA_CFG_NODE_ID: "1"
-      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
-      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
-
-      # ---- Listeners / Advertised listeners ----
-      #   * INTERNAL : utilisé pour l'IBP (inter-broker). Ici PLAINTEXT **uniquement dans le réseau Docker**
-      #   * EXTERNAL : point d'accès chiffré pour l'hôte (localhost:19092)
-      #   * CLIENT   : point d'accès chiffré pour les autres conteneurs (kafka:39092)
-      #     -> Les advertised doivent correspondre au DNS/host vus par les clients
-      KAFKA_CFG_LISTENERS: "INTERNAL://:29092,EXTERNAL://:19092,CLIENT://:39092,CONTROLLER://:9093"
-      KAFKA_CFG_ADVERTISED_LISTENERS: "INTERNAL://kafka:29092,EXTERNAL://localhost:19092,CLIENT://kafka:39092"
-      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: "INTERNAL:PLAINTEXT,EXTERNAL:SASL_SSL,CLIENT:SASL_SSL,CONTROLLER:PLAINTEXT"
-      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: "INTERNAL"
-
-      # ---- Authentification SASL/PLAIN pour les clients ----
-      #   Les comptes ci-dessous sont gérés par l'entrypoint Bitnami côté broker.
-      KAFKA_CFG_SASL_ENABLED_MECHANISMS: "PLAIN"
-      KAFKA_CFG_SASL_MECHANISM_INTER_BROKER_PROTOCOL: "PLAIN"
-      KAFKA_CLIENT_USERS: "admin,user1"
-      KAFKA_CLIENT_PASSWORDS: "admin-secret,user1-secret"
-
-      # ---- Autorisations (ACL) ----
-      #   StandardAuthorizer active l'ACL-based authZ. En dev on autorise ANONYMOUS (PLAINTEXT interne).
-      KAFKA_CFG_AUTHORIZER_CLASS_NAME: "org.apache.kafka.metadata.authorizer.StandardAuthorizer"
-      KAFKA_CFG_SUPER_USERS: "User:admin;User:ANONYMOUS"   # ⚠️ Dev only (facilite l'IBP PLAINTEXT). A retirer en prod.
-      KAFKA_CFG_ALLOW_EVERYONE_IF_NO_ACL_FOUND: "false"
-
-      # ---- TLS côté broker (PEM) ----
-      #   Ces fichiers sont fournis via le volume ./conf/certs -> /bitnami/kafka/config/certs
-      #   Le truststore est utilisé pour vérifier les clients; ici client auth est désactivé.
-      KAFKA_ENABLE_TLS: "yes"
-      KAFKA_TLS_TYPE: "PEM"
-      KAFKA_TLS_CERTIFICATE_FILE: "/bitnami/kafka/config/certs/kafka.keystore.pem"  # cert serveur
-      KAFKA_TLS_KEY_FILE: "/bitnami/kafka/config/certs/kafka.keystore.key"          # clé privée serveur
-      KAFKA_TLS_TRUSTSTORE_FILE: "/bitnami/kafka/config/certs/kafka.truststore.pem" # CA (chaîne) de confiance
-      KAFKA_TLS_CLIENT_AUTH: "none"
-      # Lorsque les certs ne matchent pas exactement le hostname, on désactive la vérification de SAN (dev)
-      KAFKA_CFG_SSL_ENDPOINT_IDENTIFICATION_ALGORITHM: " "
-
-      # ---- Divers broker ----
-      KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE: "false"  # on crée explicitement les topics
-      KAFKA_CFG_NUM_PARTITIONS: "1"
-      KAFKA_CFG_DEFAULT_REPLICATION_FACTOR: "1"
-      KAFKA_CFG_MIN_INSYNC_REPLICAS: "1"
-
-    volumes:
-      # Les artefacts TLS attendus par l'image Bitnami (PEM) :
-      #   - kafka.keystore.pem (cert serveur)
-      #   - kafka.keystore.key (clé privée serveur)
-      #   - kafka.truststore.pem (chaîne de confiance/CA)
-      - ./conf/certs:/bitnami/kafka/config/certs:ro
-
-    healthcheck:
-      # Vérifie que le broker répond côté contrôleur (KRaft) avant de débloquer les dépendances
-      test: ["CMD", "bash", "-c", "kafka-metadata-quorum.sh --bootstrap-server localhost:29092 describe --status >/dev/null 2>&1"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-
-  # =====================================
-  # Initialisation topic & ACL (idempotent)
-  # =====================================
-  init-acls:
-    image: bitnami/kafka:3.7
-    container_name: init-acls
-    depends_on:
-      kafka:
-        condition: service_healthy
-    networks: [knet]
-    volumes:
-      - ./conf/certs:/opt/bitnami/kafka/config/certs:ro
-      - ./init/create-acls-and-topic.sh:/usr/local/bin/init-acls.sh:ro
-    entrypoint: ["/bin/bash", "-lc", "bash /usr/local/bin/init-acls.sh"]
-
-  # ======================
-  # InfluxDB 2.x (setup)
-  # ======================
   influxdb:
     image: influxdb:2.7
     container_name: influxdb
-    networks: [knet]
     ports:
       - "8086:8086"
     environment:
@@ -110,37 +11,37 @@ services:
       DOCKER_INFLUXDB_INIT_ORG: ISIMA
       DOCKER_INFLUXDB_INIT_BUCKET: weather
       DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: super-admin-token-please-change-me
-    healthcheck:
-      test: ["CMD", "influx", "ping", "--host", "http://localhost:8086"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
     volumes:
       - influxdb-data:/var/lib/influxdb2
 
-  # ==============================================
-  # Init Influx (tokens + measurement « weather »)
-  # ==============================================
-  influx-init:
-    image: influxdb:2.7
-    container_name: influx-init
+  weather-pusher:
+    build: ./pusher
+    container_name: weather-pusher
     depends_on:
-      influxdb:
-        condition: service_healthy
-    networks: [knet]
+      - influxdb
     environment:
-      INFLUX_HOST: http://influxdb:8086
-      INFLUX_ORG: ISIMA
-      INFLUX_TOKEN: super-admin-token-please-change-me
-    volumes:
-      - ./init/influx-init.sh:/usr/local/bin/influx-init.sh:ro
-      - ./influx-bootstrap:/init:rw
-    entrypoint: ["/bin/bash","-lc","/usr/local/bin/influx-init.sh"]
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_ORG=ISIMA
+      - INFLUX_BUCKET=weather
+      - INFLUX_TOKEN=super-admin-token-please-change-me
+      - PUSH_INTERVAL_SECONDS=5
+      - MEASUREMENT=weather
+      - FIELD_NAME=temperature_c
+      - LOCATION_TAG=lab
 
+  weather-watcher:
+    build: ./watcher
+    container_name: weather-watcher
+    depends_on:
+      - influxdb
+    environment:
+      - PYTHONUNBUFFERED=1        # logs immédiats
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_ORG=ISIMA
+      - INFLUX_BUCKET=weather
+      - INFLUX_TOKEN=super-admin-token-please-change-me
+      - WATCH_INTERVAL_SECONDS=3  # polling
+    restart: unless-stopped       # si jamais il crash
 
 volumes:
   influxdb-data:
-
-
-networks:
-  knet:
