@@ -1,0 +1,13 @@
+[ req ]
+default_bits       = 2048
+distinguished_name = req_distinguished_name
+req_extensions     = req_ext
+prompt             = no
+
+[ req_distinguished_name ]
+CN = kafka
+O  = Dev
+OU = Dev
+
+[ req_ext ]
+subjectAltName = DNS:kafka DNS:localhost IP:127.0.0.1 DNS:localhost
